@@ -30,7 +30,22 @@ jobs:
       
       # Build signed LoopCaregiver IPA file
       - name: Fastlane Build & Archive
-        run: fastlane caregiver_build
+        run: |
+          # Ensure that gh exit codes are handled when output is piped.
+          set -o pipefail
+          if ! fastlane caregiver_build 2>&1 | tee fastlane.log; then
+            if grep -q "No matching provisioning profiles found for" fastlane.log; then
+              echo "Provisioning Profile Error" >> $GITHUB_STEP_SUMMARY
+              echo "::error::Provisioning profile(s) invalid. Run the the following Github workflows to add them: 2. Add Identifiers 3. Create Certificates"
+            elif grep -q "doesn't match the entitlements file's value for the com.apple.security.application-groups entitlement" fastlane.log; then
+              echo "Missing App Group Error" >> $GITHUB_STEP_SUMMARY
+              echo "::error::The app groups are not available for all 3 Caregiver app identifiers. Login to the Apple dev portal and add the Caregiver app group to each Caregiver identifier (see Lopp Docs). Then run the Create Certificates Github workflow"
+            else
+              echo "Build Error" >> $GITHUB_STEP_SUMMARY
+              echo "::error::Review the build log for details."
+            fi
+            exit 1
+          fi
         env:
           TEAMID: ${{ secrets.TEAMID }}
           GH_PAT: ${{ secrets.GH_PAT }}
